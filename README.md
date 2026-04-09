@@ -8,11 +8,11 @@ Built with **Tauri**, **React**, and **Python**, powered by local LLMs via **Oll
 
 ## Key Features
 
-* ** 100% Local & Private:** No OpenAI, no Cloud, no API keys. Your documents stay on your hard drive.
-* ** Hybrid Search Engine:** Combines Vector Search (LanceDB) with Keyword Search (BM25) and Cross-Encoder Reranking for production-grade retrieval accuracy.
-* ** Auto-Syncing "Magic" Folder:** Drop a file into your designated library folder. The app automatically detects, parses, chunks, and vectorizes it in the background using OS-level file watching (inode tracking).
-* ** Hot-Swappable Models:** Seamlessly switch between local models on the fly via the UI.
-* ** Robust State Management:** Idempotent ingestion pipeline with SQLite metadata tracking ensures deleted or moved files don't create "ghost" data in your chat context.
+* **100% Local & Private:** No OpenAI, no Cloud, no API keys. Your documents stay on your hard drive.
+* **Hybrid Search Engine:** Combines Vector Search (LanceDB) with Keyword Search (BM25) and Cross-Encoder Reranking for production-grade retrieval accuracy.
+* **Auto-Syncing "Magic" Folder:** Drop a file into your designated library folder. The app automatically detects, parses, chunks, and vectorizes it in the background using OS-level file watching (inode tracking).
+* **Hot-Swappable Models:** Seamlessly switch between local models on the fly via the UI.
+* **Robust State Management:** Idempotent ingestion pipeline with SQLite metadata tracking ensures deleted or moved files don't create "ghost" data in your chat context.
 
 ---
 
