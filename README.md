@@ -41,5 +41,5 @@ You must have the following installed on your system:
 ### 1. Download Local AI Models
 Open a terminal and pull the models required for chatting and embedding:
 ```bash
-ollama pull gemma4:26B
+ollama pull nemotron-3-nano:4b
 ollama pull nomic-embed-text
