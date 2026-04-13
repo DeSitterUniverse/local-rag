@@ -7,10 +7,13 @@ pub struct PythonSidecar(pub Mutex<Option<Child>>);
 fn spawn_python() -> Child {
     Command::new("python")
         .args([
-            "-m", "uvicorn",
+            "-m",
+            "uvicorn",
             "main:app",
-            "--host", "127.0.0.1",
-            "--port", "8765",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "8765",
         ])
         .current_dir("../python")
         .spawn()
@@ -24,6 +27,7 @@ fn check_backend() -> bool {
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let child = spawn_python();
             app.manage(PythonSidecar(Mutex::new(Some(child))));
