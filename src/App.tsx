@@ -15,8 +15,7 @@ export default function App() {
    * bootStatus tracks the FastAPI lifecycle.
    * models/selectedModel tracks Ollama state natively.
    */
-  const [bootStatus, setBootStatus] = useState<'waking' | 'setup' | 'ready'>('waking');
-  const [setupInfo, setSetupInfo] = useState<{title: string, message: string, code?: string}>({title: "", message: ""});
+  const [bootStatus, setBootStatus] = useState<'waking' | 'ready'>('waking');
   const [models, setModels] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -84,48 +83,25 @@ export default function App() {
 
   async function checkOllama() {
     try {
-      // By piping via Python, we bypass Chromium CORS blockades securely.
       const res = await fetch("http://127.0.0.1:8765/api/ollama/tags");
-      if (!res.ok) throw new Error("Ollama returned an error");
-      const data = await res.json();
-      const names = data.models.map((m: any) => m.name);
-      
-      const hasEmbed = names.some((n: string) => n.includes("nomic-embed-text"));
-      
-      if (!hasEmbed) {
-        setSetupInfo({
-          title: "Setup Required: Missing Embedding Model",
-          message: "Cephalon requires 'nomic-embed-text' to process and store your documents permanently. Please open your terminal and run the following command to download it:",
-          code: "ollama run nomic-embed-text"
-        });
-        setBootStatus("setup");
-        return;
+      if (res.ok) {
+        const data = await res.json();
+        const names = data.models.map((m: any) => m.name);
+        setModels(names);
+        
+        // Filter out obvious embedding models to keep chat menu clean, but don't strictly block anything
+        const chatModels = names.filter((n: string) => !(n.includes("embed")));
+        if (chatModels.length > 0) {
+          setSelectedModel(chatModels[0]);
+        } else if (names.length > 0) {
+          setSelectedModel(names[0]);
+        }
       }
-
-      if (names.length === 1) {
-          setSetupInfo({
-            title: "Setup Required: Missing Chat Model",
-            message: "You have the memory engine installed correctly, but you don't have any chat models! Download a lightweight model to chat with by running the following command:",
-            code: "ollama run nemotron-3-nano:4b"  
-          });
-          setBootStatus("setup");
-          return;
-      }
-
-      setModels(names);
-      const chatModels = names.filter((n: string) => !(n.includes("nomic") || n.includes("embed")));
-      setSelectedModel(chatModels.length > 0 ? chatModels[0] : names[0]);
-      
+    } catch (e) {
+      console.warn("Engine proxy not fully reachable. Bypassing lock:", e);
+    } finally {
       fetchDocuments();
       setBootStatus("ready");
-      
-    } catch (e) {
-      console.error("checkOllama error:", e);
-      setSetupInfo({
-        title: "Setup Required: Ollama is Offline",
-        message: "Ollama is completely out of reach or an internal state error occurred. Cephalon relies on Ollama to run its local intelligence. Please ensure Ollama is installed and running in the background.",
-      });
-      setBootStatus("setup");
     }
   }
 
@@ -261,32 +237,16 @@ export default function App() {
   }, {} as Record<string, Document[]>);
 
   /**
-   * RENDER: SETUP / BOOT SCREENS
+   * RENDER: BOOT SCREEN
    */
   if (bootStatus !== 'ready') {
     return (
       <div className="container" style={{ alignItems: 'center', justifyContent: 'center' }}>
-        {bootStatus === 'waking' ? (
-          <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
-            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🧠</div>
-            <h2>Waking Cephalon Core...</h2>
-            <p>This might take a moment while the engine decompresses.</p>
-          </div>
-        ) : (
-          <div style={{ maxWidth: '500px', backgroundColor: 'var(--panel-bg)', padding: '2rem', borderRadius: '12px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', textAlign: 'center', border: '1px solid var(--border-color)' }}>
-            <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>⚠️</div>
-            <h2 style={{ marginTop: 0, color: 'var(--text-main)' }}>{setupInfo.title}</h2>
-            <p style={{ color: "var(--text-muted)", lineHeight: '1.6', marginBottom: '1.5rem' }}>{setupInfo.message}</p>
-            {setupInfo.code && (
-              <div style={{ padding: '1rem', backgroundColor: 'var(--input-bg)', borderRadius: '8px', color: 'var(--accent)', fontFamily: 'monospace', fontSize: '0.9rem', marginBottom: '1.5rem', userSelect: 'all', border: '1px solid var(--border-color)' }}>
-                {setupInfo.code}
-              </div>
-            )}
-            <button onClick={() => {setBootStatus('waking'); checkOllama();}} style={{ padding: '0.75rem 1.5rem', backgroundColor: 'var(--accent)', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}>
-              Retry Connection
-            </button>
-          </div>
-        )}
+        <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🧠</div>
+          <h2>Waking Cephalon Core...</h2>
+          <p>This might take a moment while the engine decompresses.</p>
+        </div>
       </div>
     );
   }

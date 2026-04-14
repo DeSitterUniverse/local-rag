@@ -1,7 +1,7 @@
-# Cephalon (v1.1.0)
-> **Cephalon** is a strictly private, locally-hosted intelligence platform. It merges zero-dependency OS-native windowing via Tauri v2 with the extreme out-of-core scalability of LanceDB. Feed it anything - from dense PDFs to colossal multi-sheet Excel files - and instantly retrieve explicitly cited answers with 100% data privacy.
+# Cephalon (v1.2.0)
+> **Cephalon** is a strictly private, locally-hosted intelligence platform. It merges zero-dependency OS-native windowing via Tauri v2 with the extreme out-of-core scalability of LanceDB. Feed it anything - from dense PDFs to colossal multi-sheet Excel files - and instantly retrieve explicitly cited answers.
 
-![Version 1.1](https://img.shields.io/badge/version-1.1.0-blue) ![License MIT](https://img.shields.io/badge/license-MIT-green)
+![Version 1.2](https://img.shields.io/badge/version-1.2.0-blue) ![License MIT](https://img.shields.io/badge/license-MIT-green)
 
 ---
 
@@ -26,7 +26,7 @@ Cephalon is constructed using a decoupled, dual-language pipeline designed to ma
 
 ## Key Features
 
-*   **Radical Privacy (100% Offline):** All ingestion parsing, NLP embeddings, and LLM inferences happen directly on your silicon. No cloud, no analytics, no external APIs.
+*   **100% Offline:** All ingestion parsing, NLP embeddings, and LLM inferences happen directly on your silicon. No cloud, no analytics, no external APIs.
 *   **Sleek Multi-Thematic UI:** Fully integrated Dark and Light modes dynamically adjusting to your OS preference, packaged inside a heavily optimized, CSS-token interface.
 *   **Smart Automation:** Minimal setup. Simply drag and drop folders into the window and the engine begins chunking in the background instantly.
 
@@ -34,9 +34,9 @@ Cephalon is constructed using a decoupled, dual-language pipeline designed to ma
 
 ## Prerequisites
 
-Ensure you have the core LLM engine running smoothly before boot:
-1.  Target memory model: `ollama run nomic-embed-text`
-2.  Target dialogue model: `ollama run nemotron-3-nano:4b`
+Ensure you have Ollama installed and running. Cephalon dynamically polls your physical hardware for installed models, automatically populating the UI for seamless hot-swapping.
+1.  **Recommended memory model:** `ollama run nomic-embed-text`
+2.  **Recommended dialogue model:** Install any model of your choosing! (e.g. `ollama run nemotron-3-nano:4b` or `ollama run llama3.2`)
 
 ## Development Boot
 

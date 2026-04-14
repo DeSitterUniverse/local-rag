@@ -22,6 +22,7 @@ def build():
         "--noconfirm",
         "--onedir",
         "--name", "engine",
+        "--add-data", "AI_SYSTEM_AWARENESS.md;.",
         "python/main.py"
     ]
     

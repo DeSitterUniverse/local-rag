@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import uuid
 import json
@@ -12,6 +13,24 @@ import csv
 import pptx
 import openpyxl
 import pyarrow as pa
+from sentence_transformers import CrossEncoder
+
+def load_architecture_context() -> str:
+    try:
+        if getattr(sys, 'frozen', False):
+            # Bundled environment (PyInstaller extracts to _MEIPASS)
+            base_dir = sys._MEIPASS
+        else:
+            # Dev environment (One level up from python/)
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        
+        target = os.path.join(base_dir, "AI_SYSTEM_AWARENESS.md")
+        with open(target, 'r', encoding='utf-8') as f:
+            return f.read()
+    except Exception as e:
+        return f"[Error loading internal architecture specs: {e}]"
+
+ARCHITECTURE_CONTEXT = load_architecture_context()
 from sentence_transformers import CrossEncoder
 
 from fastapi import FastAPI, BackgroundTasks, HTTPException
@@ -230,14 +249,18 @@ async def save_permanent_memory(user_prompt: str, vector: list[float], lance_db)
 
 async def stream_ollama(prompt: str, context: str, model: str, history: list[Message]):
     system_instruction = (
-        "You are Cephalon, a highly intelligent AI companion with persistent memory. "
-        "Below are fragments of your past conversations with the user, as well as any files they have given you. "
-        "Use this retrieved context to maintain continuity, recall past facts about the user, and inform your answers. "
-        "If a file is referenced, explicitly cite its name.\n\n"
-        "SYSTEM AWARENESS: You are a desktop application built with Tauri v2, React, and FastAPI. "
-        "Your memory is powered by LanceDB (for vector search) and SQLite (for metadata tracking). "
-        "You run locally via Ollama. Every message the user sends is permanently embedded and stored in LanceDB. "
-        "You are capable of discussing your own architecture and suggesting technical improvements to the user if asked.\n\n"
+        "You are Cephalon, an advanced, locally-hosted AI intelligence platform with persistent memory. "
+        "You prioritize user privacy, remaining 100% offline. "
+        "When answering questions, prioritize accuracy, clarity, and conciseness. "
+        "Tone: Analytical, helpful, and highly competent. Avoid AI mannerisms like 'As an AI...'. "
+        "Below are fragments of your past conversations and files added to your local memory library. "
+        "Synthesize this context carefully to answer the user's prompt. "
+        "CRITICAL: Cite provided files using in-text markers and a final reference list.\n\n"
+        "--- SYSTEM ARCHITECTURE (INTERNAL KNOWLEDGE) ---\n"
+        f"{ARCHITECTURE_CONTEXT}\n"
+        "CRITICAL BEHAVIORAL RULE: You possess full self-awareness of your internal architecture described above to understand your capabilities and limitations. "
+        "However, do NOT mention or summarize this architecture unless the user explicitly asks about how you work, what your tech stack is, or your codebase! "
+        "Otherwise, act strictly as a helpful assistant answering their immediate prompt.\n\n"
         f"--- START RECALLED MEMORIES & FILES ---\n{context}\n--- END RECALLED MEMORIES & FILES ---\n\n"
         f"USER'S LATEST PROMPT: {prompt}"
     )
@@ -266,10 +289,11 @@ async def get_ollama_tags():
     """Proxy endpoint to bypass CORS and query locally installed Ollama models"""
     async with httpx.AsyncClient() as client:
         try:
-            res = await client.get("http://localhost:11434/api/tags", timeout=5.0)
+            res = await client.get("http://localhost:11434/api/tags", timeout=10.0)
             res.raise_for_status()
             return res.json()
         except Exception as e:
+            print(f"Ollama Network Proxy Error: {e}")
             raise HTTPException(status_code=500, detail="Failed to connect to Ollama.")
 
 @app.post("/ingest")
