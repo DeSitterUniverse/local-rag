@@ -11,6 +11,8 @@ import docx
 import csv
 import pptx
 import openpyxl
+import pyarrow as pa
+from sentence_transformers import CrossEncoder
 
 from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,6 +24,17 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 DB_PATH = os.path.expanduser("~/cephalon-data")
 os.makedirs(DB_PATH, exist_ok=True)
+
+# Define PyArrow Schema explicitly for LanceDB vectors
+schema = pa.schema([
+    pa.field("vector", pa.list_(pa.float32(), 768)),
+    pa.field("id", pa.string()),
+    pa.field("doc_id", pa.string()),
+    pa.field("text", pa.string())
+])
+
+# Initialize global Cross-Encoder reranker
+reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
 
 def _init_db(conn):
     conn.executescript("""
@@ -163,7 +176,8 @@ async def process_single_file(file_path: str, lance_db, sqlite_conn):
         if "vectors" in lance_db.table_names():
             lance_db.open_table("vectors").add(lance_data)
         else:
-            lance_db.create_table("vectors", data=lance_data)
+            tbl = lance_db.create_table("vectors", data=lance_data, schema=schema)
+            tbl.create_fts_index("text")
 
         # 5. Mark Complete
         cursor.execute("UPDATE documents SET status = 'ready', chunk_count = ? WHERE id = ?", (len(chunks), doc_id))
@@ -191,8 +205,11 @@ async def save_permanent_memory(user_prompt: str, vector: list[float], lance_db)
     memory_text = f"[Past Conversation Context]: The user previously stated/asked: '{user_prompt}'"
     lance_data = [{"vector": vector, "id": memory_id, "doc_id": "core_memory", "text": memory_text}]
     try:
-        if "vectors" in lance_db.table_names(): lance_db.open_table("vectors").add(lance_data)
-        else: lance_db.create_table("vectors", data=lance_data)
+        if "vectors" in lance_db.table_names(): 
+            lance_db.open_table("vectors").add(lance_data)
+        else: 
+            tbl = lance_db.create_table("vectors", data=lance_data, schema=schema)
+            tbl.create_fts_index("text")
     except Exception: pass
 
 async def stream_ollama(prompt: str, context: str, model: str, history: list[Message]):
@@ -248,8 +265,18 @@ async def chat_and_remember(req: QueryRequest, background_tasks: BackgroundTasks
     
     context_chunks = []
     if "vectors" in db.table_names():
-        results = db.open_table("vectors").search(query_vector).limit(6).to_list()
+        # Hybrid Search for top 20
+        results = db.open_table("vectors").search(query_type="hybrid", vector_column_name="vector").text(req.prompt).vector(query_vector).limit(20).to_list()
         if results:
+            # Cross-Encoder Reranking
+            pairs = [[req.prompt, res["text"]] for res in results]
+            scores = reranker.predict(pairs)
+            
+            for idx, res in enumerate(results):
+                res["score"] = float(scores[idx])
+            
+            results = sorted(results, key=lambda x: x["score"], reverse=True)[:3]
+
             doc_ids = list(set([res["doc_id"] for res in results]))
             placeholders = ",".join("?" * len(doc_ids))
             cursor = app.state.sqlite.cursor()
