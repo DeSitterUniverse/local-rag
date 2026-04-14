@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { openPath } from "@tauri-apps/plugin-opener";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -126,9 +126,12 @@ export default function App() {
 
   async function handleOpenLocation(filePath: string) {
     try {
-      const dirPath = filePath.substring(0, Math.max(filePath.lastIndexOf('\\'), filePath.lastIndexOf('/')));
-      await openPath(dirPath);
-    } catch (e) {}
+      // This natively opens the OS file explorer to the directory 
+      // and automatically highlights the exact file.
+      await revealItemInDir(filePath);
+    } catch (e) {
+      console.error("Failed to open directory:", e);
+    }
   }
 
   async function confirmDelete() {
