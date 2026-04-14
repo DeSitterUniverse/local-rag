@@ -45,3 +45,6 @@ data/lancedb/
 # Environment Variables
 .env
 .env.*
+
+# Internal Docs
+CEPHALON_ARCHITECTURE_DEEP_DIVE.md

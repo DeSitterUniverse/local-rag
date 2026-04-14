@@ -38,6 +38,11 @@ os.environ['HF_HOME'] = os.path.expanduser("~/.cephalon/models")
 reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
 
 def _init_db(conn):
+    """
+    Initializes the SQLite metadata tracking database.
+    While LanceDB handles the actual machine learning embeddings, SQLite acts as the DAG source of truth
+    for UI state, tracking file upload status, deletion hooks, and chunk counts to prevent orphan vectors.
+    """
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS documents (
             id TEXT PRIMARY KEY,
@@ -142,13 +147,23 @@ def extract_text(path: str) -> str:
             with open(path, 'r', encoding='latin-1') as f: return f.read()
 
 async def get_embedding(text: str) -> list[float]:
+    """
+    Passes a raw text string to the local Ollama LLM to generate a high-dimensional tensor float array.
+    This array mathematically represents the core 'meaning' of the string to be graphed inside LanceDB.
+    """
     async with httpx.AsyncClient() as client:
         res = await client.post("http://localhost:11434/api/embeddings", json={"model": "nomic-embed-text", "prompt": text}, timeout=30.0)
         res.raise_for_status()
         return res.json()["embedding"]
 
 async def process_single_file(file_path: str, lance_db, sqlite_conn):
-    """Background task to safely process a file without blocking the server."""
+    """
+    Core Pipeline: Safely ingests a file asynchronously.
+    1. Extracts raw strings using deep parsers.
+    2. Uses Langchain layout chunking to split text without breaking sentence logic.
+    3. Triggers embedding sequence.
+    4. Commits vectors to LanceDB and updates SQLite tracking state to signal the frontend.
+    """
     doc_id = str(uuid.uuid4())
     cursor = sqlite_conn.cursor()
     
