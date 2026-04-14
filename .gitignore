@@ -7,6 +7,7 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Node
 node_modules
 dist
 dist-ssr
@@ -23,14 +24,24 @@ dist-ssr
 *.sln
 *.sw?
 
-# Python
+# Tauri Build Artifacts
+src-tauri/target/
+
+# Python & PyInstaller Build Artifacts
 venv/
+.venv/
 __pycache__/
 *.pyc
+build/
+*.spec
+
+# Bundled Backend Sidecar
+src-tauri/backend/
 
 # Local RAG Data
+data/
 data/lancedb/
-data
 
-# OS generated files
-.DS_Store
+# Environment Variables
+.env
+.env.*

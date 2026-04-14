@@ -14,7 +14,7 @@ import openpyxl
 import pyarrow as pa
 from sentence_transformers import CrossEncoder
 
-from fastapi import FastAPI, BackgroundTasks
+from fastapi import FastAPI, BackgroundTasks, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from contextlib import asynccontextmanager
@@ -34,6 +34,7 @@ schema = pa.schema([
 ])
 
 # Initialize global Cross-Encoder reranker
+os.environ['HF_HOME'] = os.path.expanduser("~/.cephalon/models")
 reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
 
 def _init_db(conn):
@@ -244,6 +245,17 @@ def get_documents():
     cursor.execute("SELECT id, path, status, chunk_count FROM documents WHERE type = 'file' ORDER BY ingested_at DESC")
     docs = [{"id": r[0], "name": os.path.basename(r[1]), "path": r[1], "status": r[2], "chunks": r[3]} for r in cursor.fetchall()]
     return {"documents": docs}
+
+@app.get("/api/ollama/tags")
+async def get_ollama_tags():
+    """Proxy endpoint to bypass CORS and query locally installed Ollama models"""
+    async with httpx.AsyncClient() as client:
+        try:
+            res = await client.get("http://localhost:11434/api/tags", timeout=5.0)
+            res.raise_for_status()
+            return res.json()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail="Failed to connect to Ollama.")
 
 @app.post("/ingest")
 async def ingest_endpoint(req: IngestRequest, background_tasks: BackgroundTasks):
