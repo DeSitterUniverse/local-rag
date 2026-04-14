@@ -1,45 +1,29 @@
-# LocalRAG: Offline-First Document Intelligence
+# Cephalon
 
-A 100% local, privacy-first Retrieval-Augmented Generation (RAG) desktop application. Chat with your PDFs, code files, and notes with zero data leaving your machine and zero API costs. 
+Cephalon is a local, privacy-centric AI application that functions as a persistent digital assistant. It maintains a continuous memory of past conversations and user-provided documents, allowing it to recall facts, context, and references indefinitely.
 
-Built with **Tauri**, **React**, and **Python**, powered by local LLMs via **Ollama**.
+## Functionality
 
----
+* Persistent Conversation Memory: All interactions are embedded and stored permanently. The AI recalls past statements and context without being limited by a traditional sliding context window.
+* Document Reference Library: Users can drag and drop PDF and text files directly into the application window. The application extracts, chunks, embeds, and stores the text for retrieval.
+* Native File System Integration: Users can open the source folder of any referenced document directly from the user interface or delete documents entirely from the AI's database.
+* Offline Execution: All data processing, vector embedding, and language model inference happens locally on the host machine. No data is sent to external servers.
+* Dynamic Model Selection: Users can switch between any locally installed Ollama models via the user interface.
 
-## Key Features
+## How Persistent Memory Works
 
-* **100% Local & Private:** No OpenAI, no Cloud, no API keys. Your documents stay on your hard drive.
-* **Hybrid Search Engine:** Combines Vector Search (LanceDB) with Keyword Search (BM25) and Cross-Encoder Reranking for production-grade retrieval accuracy.
-* **Auto-Syncing "Magic" Folder:** Drop a file into your designated library folder. The app automatically detects, parses, chunks, and vectorizes it in the background using OS-level file watching (inode tracking).
-* **Hot-Swappable Models:** Seamlessly switch between local models on the fly via the UI.
-* **Robust State Management:** Idempotent ingestion pipeline with SQLite metadata tracking ensures deleted or moved files don't create "ghost" data in your chat context.
+The application achieves lifelong memory by treating past conversations exactly like ingested documents.
 
----
+1. Input Processing: When a user sends a message, the text is embedded using the `nomic-embed-text` model.
+2. Background Storage: The raw text and its resulting vector embedding are immediately stored in LanceDB under a dedicated `Cephalon_memory` namespace.
+3. Retrieval: Before generating a response, the application performs a vector similarity search against the user's prompt. It retrieves the top six most relevant fragments from LanceDB. These fragments can be from previously uploaded files, past conversation turns, or a mix of both.
+4. Synthesis: The retrieved fragments are injected into the system prompt. The model reads these recalled memories as current context, creating continuous, unbroken memory retrieval.
 
-## Architecture Stack
+## Architecture and Technical Choices
 
-* **Desktop Shell:** [Tauri](https://tauri.app/) (Rust)
-* **Frontend UI:** React, TypeScript, Vite
-* **AI Orchestration:** [Ollama](https://ollama.com/)
-* **Backend API & Processing:** Python, FastAPI, LlamaIndex
-* **Vector Database:** [LanceDB](https://lancedb.com/) (Embedded, runs on disk)
-* **Metadata Database:** SQLite
-* **Search & Reranking:** `rank_bm25`, `sentence-transformers`
-
----
-
-## Getting Started
-
-### Prerequisites
-
-You must have the following installed on your system:
-1. **[Node.js](https://nodejs.org/)** (v18+)
-2. **[Rust](https://rustup.rs/)** (Required for Tauri)
-3. **[Python](https://www.python.org/)** (3.10+)
-4. **[Ollama](https://ollama.com/)**
-
-### 1. Download Local AI Models
-Open a terminal and pull the models required for chatting and embedding:
-```bash
-ollama pull nemotron-3-nano:4b
-ollama pull nomic-embed-text
+* Frontend Framework: Tauri v2 and React. Tauri was selected to bypass browser security restrictions. This enables native drag-and-drop events and direct file system access without requiring the user to upload files to a local web server.
+* Backend Framework: FastAPI (Python). Chosen for native compatibility with standard machine learning libraries (LangChain, PyPDF) and high-performance asynchronous HTTP streaming.
+* Vector Database: LanceDB. Chosen because it runs entirely in-process. It does not require a separate database server (unlike Milvus or Qdrant), making it ideal for a standalone desktop application.
+* Relational Database: SQLite. Used to track document metadata, chunk counts, file paths, and ingestion status. Separating metadata from vector data keeps vector searches fast and allows for relational queries, such as grouping the user interface by file type.
+* LLM Engine: Ollama. Provides a standardized, reliable API for running quantized local models.
+* Text Chunking: LangChain RecursiveCharacterTextSplitter. Replaced a naive word-counting approach. This ensures text is split at natural language boundaries (paragraphs and sentences). Preserving sentence integrity prevents fragmented context and significantly improves embedding accuracy.
