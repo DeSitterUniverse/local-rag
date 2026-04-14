@@ -8,6 +8,9 @@ import httpx
 import uvicorn
 import lancedb
 import docx
+import csv
+import pptx
+import openpyxl
 
 from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,7 +20,7 @@ from pydantic import BaseModel
 from pypdf import PdfReader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-DB_PATH = os.path.expanduser("~/local-rag-data")
+DB_PATH = os.path.expanduser("~/cephalon-data")
 os.makedirs(DB_PATH, exist_ok=True)
 
 def _init_db(conn):
@@ -77,20 +80,51 @@ def get_file_hash(path: str) -> str:
     return hasher.hexdigest()
 
 def extract_text(path: str) -> str:
-    """Robust extraction with graceful fallbacks for multiple formats."""
+    """Robust extraction for PDF, Word, Excel, PowerPoint, CSV, and plain text."""
     ext = path.lower().split('.')[-1]
     
     if ext == 'pdf':
         return "\n".join([page.extract_text() for page in PdfReader(path).pages if page.extract_text()])
+    
     elif ext == 'docx':
         doc = docx.Document(path)
         return "\n".join([para.text for para in doc.paragraphs])
+    
+    elif ext == 'pptx':
+        prs = pptx.Presentation(path)
+        text_runs = []
+        for slide in prs.slides:
+            for shape in slide.shapes:
+                if hasattr(shape, "text"):
+                    text_runs.append(shape.text)
+        return "\n".join(text_runs)
+        
+    elif ext == 'xlsx':
+        # data_only=True ensures we get the calculated values, not the raw formulas
+        wb = openpyxl.load_workbook(path, data_only=True)
+        text_runs = []
+        for sheet in wb.worksheets:
+            text_runs.append(f"--- Sheet: {sheet.title} ---")
+            for row in sheet.iter_rows(values_only=True):
+                # Convert row cells to string and join with tabs for LLM readability
+                row_text = "\t".join([str(cell) if cell is not None else "" for cell in row])
+                if row_text.strip():
+                    text_runs.append(row_text)
+        return "\n".join(text_runs)
+        
+    elif ext == 'csv':
+        text_runs = []
+        with open(path, newline='', encoding='utf-8') as f:
+            reader = csv.reader(f)
+            for row in reader:
+                text_runs.append("\t".join(row))
+        return "\n".join(text_runs)
+        
     else:
-        # Fallback for txt, md, csv, json, py, js, etc.
+        # Fallback for txt, md, json, py, js, etc.
         try:
             with open(path, 'r', encoding='utf-8') as f: return f.read()
         except UnicodeDecodeError:
-            # If utf-8 fails, try latin-1 before giving up entirely
             with open(path, 'r', encoding='latin-1') as f: return f.read()
 
 async def get_embedding(text: str) -> list[float]:
@@ -142,7 +176,10 @@ async def process_single_file(file_path: str, lance_db, sqlite_conn):
 
 async def process_directory(dir_path: str, lance_db, sqlite_conn):
     """Walks a directory and enqueues supported files."""
-    supported_extensions = ['.pdf', '.docx', '.txt', '.md', '.csv', '.json', '.py', '.js', '.ts', '.html']
+    supported_extensions = [
+        '.pdf', '.docx', '.pptx', '.xlsx', '.csv', 
+        '.txt', '.md', '.json', '.py', '.js', '.ts', '.html'
+    ]
     for root, _, files in os.walk(dir_path):
         for file in files:
             if any(file.lower().endswith(ext) for ext in supported_extensions):

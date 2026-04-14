@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 type Message = { role: "user" | "assistant"; content: string };
 type Document = { id: string; name: string; status: string; chunks: number; path: string };
@@ -295,7 +296,26 @@ export default function App() {
           {messages.map((msg, i) => (
             <div key={i} style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}>
               <div style={{ maxWidth: "80%", padding: "1rem 1.25rem", borderRadius: "16px", borderBottomRightRadius: msg.role === "user" ? "4px" : "16px", borderBottomLeftRadius: msg.role === "assistant" ? "4px" : "16px", backgroundColor: msg.role === "user" ? "#111827" : "#f3f4f6", color: msg.role === "user" ? "white" : "#1f2937", lineHeight: "1.6", boxShadow: msg.role === "user" ? "0 4px 6px -1px rgba(0, 0, 0, 0.1)" : "none" }}>
-                {msg.role === "user" ? msg.content : <div className="prose prose-sm"><ReactMarkdown>{msg.content}</ReactMarkdown></div>}
+                {msg.role === "user" ? (
+                  msg.content
+                ) : (
+                  <div style={{ fontSize: "0.875rem", width: "100%", overflowX: "auto" }}>
+                    <ReactMarkdown 
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        table: ({node, ...props}) => <table style={{ borderCollapse: 'collapse', width: '100%', margin: '1rem 0' }} {...props} />,
+                        th: ({node, ...props}) => <th style={{ border: '1px solid #d1d5db', padding: '0.5rem 0.75rem', backgroundColor: '#e5e7eb', textAlign: 'left', fontWeight: 600, color: '#374151' }} {...props} />,
+                        td: ({node, ...props}) => <td style={{ border: '1px solid #d1d5db', padding: '0.5rem 0.75rem', color: '#4b5563' }} {...props} />,
+                        pre: ({node, ...props}) => <pre style={{ backgroundColor: '#111827', color: '#f3f4f6', padding: '1rem', borderRadius: '8px', overflowX: 'auto', margin: '1rem 0' }} {...props} />,
+                        code: ({node, inline, className, children, ...props}: any) => inline 
+                          ? <code style={{ backgroundColor: '#e5e7eb', padding: '0.125rem 0.25rem', borderRadius: '4px', color: '#ef4444', fontFamily: 'monospace' }} {...props}>{children}</code>
+                          : <code style={{ fontFamily: 'monospace' }} {...props}>{children}</code>
+                      }}
+                    >
+                      {msg.content}
+                    </ReactMarkdown>
+                  </div>
+                )}
               </div>
             </div>
           ))}
