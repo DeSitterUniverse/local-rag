@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+lancedb
+pyarrow
+python-docx
+openpyxl
+pypdf
+onnxruntime
+transformers
+numpy
+llama-cpp-python
+langchain-text-splitters

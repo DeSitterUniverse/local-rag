@@ -9,11 +9,56 @@ import "./App.css"; // Import dynamic CSS token system
 type Message = { role: "user" | "assistant"; content: string };
 type Document = { id: string; name: string; status: string; chunks: number; path: string };
 
+function parseThinking(content: string): { thinking: string; response: string } {
+  const closeTag = "</think>";
+  const closeIdx = content.indexOf(closeTag);
+  
+  // No closing tag at all — no thinking block present
+  if (closeIdx === -1) {
+    // Check if there's an opening tag without a close (still streaming thinking)
+    const openTag = "<think>";
+    const openIdx = content.indexOf(openTag);
+    if (openIdx !== -1) {
+      return { thinking: content.substring(openIdx + openTag.length).trim(), response: "" };
+    }
+    return { thinking: "", response: content };
+  }
+  
+  // Found </think> — extract thinking and response
+  const openTag = "<think>";
+  const openIdx = content.indexOf(openTag);
+  
+  // If opening tag exists, use content between open and close
+  // If no opening tag (common with some GGUF templates), everything before </think> is thinking
+  const thinkStart = openIdx !== -1 ? openIdx + openTag.length : 0;
+  const thinking = content.substring(thinkStart, closeIdx).trim();
+  const response = content.substring(closeIdx + closeTag.length).trim();
+  
+  return { thinking, response };
+}
+
+function ThinkingBlock({ thinking }: { thinking: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <div>
+      <button className="thinking-toggle" onClick={() => setIsOpen(!isOpen)}>
+        <span className={`chevron ${isOpen ? 'open' : ''}`}>▶</span>
+        {isOpen ? "Hide reasoning" : "View reasoning"}
+      </button>
+      <div className={`thinking-content ${isOpen ? 'visible' : ''}`}>
+        <div className="thinking-content-inner">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{thinking}</ReactMarkdown>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   /** 
    * CRITICAL STATE 
    * bootStatus tracks the FastAPI lifecycle.
-   * models/selectedModel tracks Ollama state natively.
+   * models/selectedModel tracks locally installed .gguf models.
    */
   const [bootStatus, setBootStatus] = useState<'waking' | 'ready'>('waking');
   const [models, setModels] = useState<string[]>([]);
@@ -59,7 +104,7 @@ export default function App() {
         try {
           const res = await fetch("http://127.0.0.1:8765/health");
           if (res.ok) {
-            await checkOllama();
+            await loadModels();
             break;
           }
         } catch {}
@@ -81,19 +126,15 @@ export default function App() {
     }
   }, [bootStatus]);
 
-  async function checkOllama() {
+  async function loadModels() {
     try {
-      const res = await fetch("http://127.0.0.1:8765/api/ollama/tags");
+      const res = await fetch("http://127.0.0.1:8765/models");
       if (res.ok) {
         const data = await res.json();
-        const names = data.models.map((m: any) => m.name);
+        const names = data.models;
         setModels(names);
         
-        // Filter out obvious embedding models to keep chat menu clean, but don't strictly block anything
-        const chatModels = names.filter((n: string) => !(n.includes("embed")));
-        if (chatModels.length > 0) {
-          setSelectedModel(chatModels[0]);
-        } else if (names.length > 0) {
+        if (names.length > 0) {
           setSelectedModel(names[0]);
         }
       }
@@ -370,19 +411,38 @@ export default function App() {
               <p style={{ lineHeight: "1.5" }}>I remember our past conversations. You can chat normally, or drop files and folders into this window to add them to my reference library.</p>
             </div>
           )}
-          {messages.map((msg, i) => (
+          {messages.map((msg, i) => {
+            const { thinking, response } = msg.role === "assistant" ? parseThinking(msg.content) : { thinking: "", response: msg.content };
+            const hasThinking = thinking.length > 0;
+            const isStreaming = isTyping && i === messages.length - 1;
+            
+            // During streaming: if no </think> found yet, the model may still be in its thinking phase.
+            // Detect this by checking if the raw content lacks </think> but we're still receiving tokens.
+            const isStillThinking = isStreaming && msg.role === "assistant" && !msg.content.includes("</think>") && !hasThinking;
+            
+            const displayContent = msg.role === "assistant" 
+              ? (hasThinking ? response : (isStillThinking ? "" : msg.content))
+              : msg.content;
+
+            return (
             <div key={i} style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}>
               <div style={{ maxWidth: "80%", padding: "1rem 1.25rem", borderRadius: "16px", borderBottomRightRadius: msg.role === "user" ? "4px" : "16px", borderBottomLeftRadius: msg.role === "assistant" ? "4px" : "16px", backgroundColor: msg.role === "user" ? "var(--user-msg-bg)" : "var(--bot-msg-bg)", color: msg.role === "user" ? "var(--user-msg-text)" : "var(--text-main)", lineHeight: "1.6", boxShadow: msg.role === "user" ? "0 4px 6px -1px rgba(0, 0, 0, 0.1)" : "none" }}>
                 {msg.role === "user" ? (
                   msg.content
                 ) : (
                   <div className="markdown-body" style={{ fontSize: "0.875rem", width: "100%", overflowX: "auto" }}>
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                    {hasThinking && !isStreaming && <ThinkingBlock thinking={thinking} />}
+                    {(isStillThinking || (hasThinking && isStreaming && !response)) && (
+                      <div style={{ color: "var(--text-muted)", fontSize: "0.8rem", fontStyle: "italic", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        <span style={{ display: "inline-block", animation: "pulse 1.5s ease-in-out infinite" }}>🧠</span> Reasoning...
+                      </div>
+                    )}
+                    {displayContent && <ReactMarkdown remarkPlugins={[remarkGfm]}>{displayContent}</ReactMarkdown>}
                   </div>
                 )}
               </div>
             </div>
-          ))}
+          );})}
           {isTyping && messages[messages.length - 1]?.role === "user" && (
             <div style={{ display: "flex", justifyContent: "flex-start" }}>
                <div style={{ backgroundColor: "var(--bot-msg-bg)", padding: "1rem 1.25rem", borderRadius: "16px", color: "var(--text-muted)", fontSize: "0.875rem", fontStyle: "italic" }}>Synthesizing memories...</div>

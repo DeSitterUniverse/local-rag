@@ -5,7 +5,6 @@ import uuid
 import json
 import hashlib
 import sqlite3
-import httpx
 import uvicorn
 import lancedb
 import docx
@@ -13,7 +12,11 @@ import csv
 import pptx
 import openpyxl
 import pyarrow as pa
-from sentence_transformers import CrossEncoder
+import onnxruntime as ort
+import numpy as np
+import gc
+from transformers import AutoTokenizer
+from llama_cpp import Llama
 
 def load_architecture_context() -> str:
     try:
@@ -31,7 +34,6 @@ def load_architecture_context() -> str:
         return f"[Error loading internal architecture specs: {e}]"
 
 ARCHITECTURE_CONTEXT = load_architecture_context()
-from sentence_transformers import CrossEncoder
 
 from fastapi import FastAPI, BackgroundTasks, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -43,6 +45,8 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 DB_PATH = os.path.expanduser("~/cephalon-data")
 os.makedirs(DB_PATH, exist_ok=True)
+MODEL_DIR = os.path.expanduser("~/cephalon-data/models")
+os.makedirs(MODEL_DIR, exist_ok=True)
 
 # Define PyArrow Schema explicitly for LanceDB vectors
 schema = pa.schema([
@@ -52,10 +56,7 @@ schema = pa.schema([
     pa.field("text", pa.string())
 ])
 
-# Initialize global Cross-Encoder reranker
 os.environ['HF_HOME'] = os.path.expanduser("~/.cephalon/models")
-reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
-
 def _init_db(conn):
     """
     Initializes the SQLite metadata tracking database.
@@ -91,6 +92,46 @@ def _init_db(conn):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Pure ONNX Boot — auto-extract bundled models on first run
+    onnx_path = os.path.expanduser("~/cephalon-data/models/cross-encoder")
+    embed_path = os.path.expanduser("~/cephalon-data/models/embedder")
+    model_file = os.path.join(onnx_path, "model.onnx")
+    embed_file = os.path.join(embed_path, "model.onnx")
+    
+    # If models don't exist locally, extract from bundled PyInstaller package
+    if not os.path.exists(model_file) or not os.path.exists(embed_file):
+        if getattr(sys, 'frozen', False):
+            bundled_base = os.path.join(sys._MEIPASS, "onnx_models")
+            bundled_cross = os.path.join(bundled_base, "cross-encoder")
+            bundled_embed = os.path.join(bundled_base, "embedder")
+            
+            if os.path.exists(bundled_cross) and os.path.exists(bundled_embed):
+                import shutil
+                print("First boot detected — extracting bundled ONNX models...")
+                if not os.path.exists(onnx_path):
+                    shutil.copytree(bundled_cross, onnx_path)
+                if not os.path.exists(embed_path):
+                    shutil.copytree(bundled_embed, embed_path)
+                print("ONNX models extracted successfully.")
+            else:
+                print("CRITICAL ERROR: Bundled ONNX models not found in installer!")
+                os._exit(1)
+        else:
+            print("CRITICAL ERROR: Native ONNX Models not found!")
+            print("Please run 'python export_onnx.py' ONE TIME to generate the ONNX models.")
+            os._exit(1)
+        
+    print("Loading Pure ONNX Runtime Engines (Zero PyTorch)...")
+    opts = ort.SessionOptions()
+    app.state.reranker = ort.InferenceSession(model_file, sess_options=opts)
+    app.state.tokenizer = AutoTokenizer.from_pretrained(onnx_path)
+    
+    app.state.embedder = ort.InferenceSession(embed_file, sess_options=opts)
+    app.state.embed_tokenizer = AutoTokenizer.from_pretrained(embed_path)
+
+    app.state.llm = None
+    app.state.active_model_name = None
+
     app.state.lance = lancedb.connect(f"{DB_PATH}/lancedb")
     app.state.sqlite = sqlite3.connect(f"{DB_PATH}/meta.db", check_same_thread=False)
     _init_db(app.state.sqlite)
@@ -99,6 +140,32 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan, title="Cephalon API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+def load_llm(model_filename: str):
+    if getattr(app.state, "llm", None) is not None:
+        print("Deallocating previous VRAM model...")
+        del app.state.llm
+        gc.collect()
+        
+    model_path = os.path.join(MODEL_DIR, model_filename)
+    if not os.path.exists(model_path):
+        raise FileNotFoundError(f"Model file not found: {model_path}")
+        
+    print(f"Loading {model_filename} into VRAM via Hardware Acceleration...")
+    try:
+        app.state.llm = Llama(
+            model_path=model_path,
+            n_gpu_layers=-1,
+            n_ctx=4096,
+            verbose=False
+        )
+        app.state.active_model_name = model_filename
+        print(f"Model '{model_filename}' loaded successfully.")
+    except Exception as e:
+        print(f"FATAL: Failed to load model '{model_filename}': {e}")
+        app.state.llm = None
+        app.state.active_model_name = None
+        raise HTTPException(status_code=500, detail=f"Failed to load model: {e}")
 
 class Message(BaseModel):
     role: str
@@ -167,13 +234,23 @@ def extract_text(path: str) -> str:
 
 async def get_embedding(text: str) -> list[float]:
     """
-    Passes a raw text string to the local Ollama LLM to generate a high-dimensional tensor float array.
-    This array mathematically represents the core 'meaning' of the string to be graphed inside LanceDB.
+    Generate 768-dim embeddings entirely locally on ONNX to populate LanceDB.
     """
-    async with httpx.AsyncClient() as client:
-        res = await client.post("http://localhost:11434/api/embeddings", json={"model": "nomic-embed-text", "prompt": text}, timeout=30.0)
-        res.raise_for_status()
-        return res.json()["embedding"]
+    inputs = app.state.embed_tokenizer(text, padding=True, truncation=True, return_tensors="np")
+    ort_inputs = {
+        "input_ids": inputs["input_ids"].astype(np.int64),
+        "attention_mask": inputs["attention_mask"].astype(np.int64),
+    }
+    if "token_type_ids" in inputs:
+        ort_inputs["token_type_ids"] = inputs["token_type_ids"].astype(np.int64)
+        
+    outs = app.state.embedder.run(None, ort_inputs)
+    last_hidden = outs[0][0]
+    
+    # BGE models require CLS pooling (token 0) and L2 normalization
+    cls_token = last_hidden[0]
+    vec = cls_token / np.linalg.norm(cls_token)
+    return vec.tolist()
 
 async def process_single_file(file_path: str, lance_db, sqlite_conn):
     """
@@ -247,7 +324,7 @@ async def save_permanent_memory(user_prompt: str, vector: list[float], lance_db)
             tbl.create_fts_index("text")
     except Exception: pass
 
-async def stream_ollama(prompt: str, context: str, model: str, history: list[Message]):
+def stream_llama(prompt: str, context: str, model: str, history: list[Message]):
     system_instruction = (
         "You are Cephalon, an advanced, locally-hosted AI intelligence platform with persistent memory. "
         "You prioritize user privacy, remaining 100% offline. "
@@ -255,24 +332,28 @@ async def stream_ollama(prompt: str, context: str, model: str, history: list[Mes
         "Tone: Analytical, helpful, and highly competent. Avoid AI mannerisms like 'As an AI...'. "
         "Below are fragments of your past conversations and files added to your local memory library. "
         "Synthesize this context carefully to answer the user's prompt. "
-        "CRITICAL: Cite provided files using in-text markers and a final reference list.\n\n"
+        "When using the files for relevant info, cite provided files using in-text markers and a final reference list.\n\n"
         "--- SYSTEM ARCHITECTURE (INTERNAL KNOWLEDGE) ---\n"
         f"{ARCHITECTURE_CONTEXT}\n"
         "CRITICAL BEHAVIORAL RULE: You possess full self-awareness of your internal architecture described above to understand your capabilities and limitations. "
-        "However, do NOT mention or summarize this architecture unless the user explicitly asks about how you work, what your tech stack is, or your codebase! "
+        "However, do NOT mention or summarize this architecture unless the user explicitly asks about how you work, what your tech stack is, your codebase! or in the rare case it is relevant "
         "Otherwise, act strictly as a helpful assistant answering their immediate prompt.\n\n"
         f"--- START RECALLED MEMORIES & FILES ---\n{context}\n--- END RECALLED MEMORIES & FILES ---\n\n"
-        f"USER'S LATEST PROMPT: {prompt}"
     )
-    formatted_messages = [{"role": msg.role, "content": msg.content} for msg in history]
-    formatted_messages.append({"role": "user", "content": system_instruction})
+    formatted_messages = [{"role": "system", "content": system_instruction}]
+    formatted_messages.extend([{"role": msg.role, "content": msg.content} for msg in history])
+    formatted_messages.append({"role": "user", "content": prompt})
 
-    async with httpx.AsyncClient() as client:
-        async with client.stream("POST", "http://localhost:11434/api/chat", json={"model": model, "messages": formatted_messages, "stream": True, "temperature": 0.4}, timeout=120.0) as response:
-            async for chunk in response.aiter_lines():
-                if chunk:
-                    data = json.loads(chunk)
-                    if "message" in data and "content" in data["message"]: yield data["message"]["content"]
+    stream = app.state.llm.create_chat_completion(
+        messages=formatted_messages,
+        stream=True,
+        temperature=0.4
+    )
+    for chunk in stream:
+        delta = chunk["choices"][0].get("delta", {})
+        content = delta.get("content", "")
+        if content:
+            yield content
 
 @app.get("/health")
 def health(): return {"status": "ok"}
@@ -284,17 +365,14 @@ def get_documents():
     docs = [{"id": r[0], "name": os.path.basename(r[1]), "path": r[1], "status": r[2], "chunks": r[3]} for r in cursor.fetchall()]
     return {"documents": docs}
 
-@app.get("/api/ollama/tags")
-async def get_ollama_tags():
-    """Proxy endpoint to bypass CORS and query locally installed Ollama models"""
-    async with httpx.AsyncClient() as client:
-        try:
-            res = await client.get("http://localhost:11434/api/tags", timeout=10.0)
-            res.raise_for_status()
-            return res.json()
-        except Exception as e:
-            print(f"Ollama Network Proxy Error: {e}")
-            raise HTTPException(status_code=500, detail="Failed to connect to Ollama.")
+@app.get("/models")
+def get_models():
+    """Returns local .gguf models for the UI, ignoring ONNX subdirectories."""
+    files = [
+        entry.name for entry in os.scandir(MODEL_DIR)
+        if entry.is_file() and entry.name.endswith(".gguf")
+    ]
+    return {"models": files}
 
 @app.post("/ingest")
 async def ingest_endpoint(req: IngestRequest, background_tasks: BackgroundTasks):
@@ -310,6 +388,9 @@ async def ingest_endpoint(req: IngestRequest, background_tasks: BackgroundTasks)
 
 @app.post("/query")
 async def chat_and_remember(req: QueryRequest, background_tasks: BackgroundTasks):
+    if getattr(app.state, "active_model_name", None) != req.model:
+        load_llm(req.model)
+        
     query_vector = await get_embedding(req.prompt)
     db = app.state.lance
     background_tasks.add_task(save_permanent_memory, req.prompt, query_vector, app.state.lance)
@@ -319,9 +400,20 @@ async def chat_and_remember(req: QueryRequest, background_tasks: BackgroundTasks
         # Hybrid Search for top 20
         results = db.open_table("vectors").search(query_type="hybrid", vector_column_name="vector").text(req.prompt).vector(query_vector).limit(20).to_list()
         if results:
-            # Cross-Encoder Reranking
+            # Native ONNX Inference (No Pipelines, No PyTorch)
             pairs = [[req.prompt, res["text"]] for res in results]
-            scores = reranker.predict(pairs)
+            
+            inputs = app.state.tokenizer(pairs, padding=True, truncation=True, return_tensors="np")
+            
+            ort_inputs = {
+                "input_ids": inputs["input_ids"].astype(np.int64),
+                "attention_mask": inputs["attention_mask"].astype(np.int64),
+            }
+            if "token_type_ids" in inputs:
+                ort_inputs["token_type_ids"] = inputs["token_type_ids"].astype(np.int64)
+                
+            ort_outs = app.state.reranker.run(None, ort_inputs)
+            scores = ort_outs[0].flatten()
             
             for idx, res in enumerate(results):
                 res["score"] = float(scores[idx])
@@ -338,7 +430,7 @@ async def chat_and_remember(req: QueryRequest, background_tasks: BackgroundTasks
                 else: context_chunks.append(f"[Source File: {path_map.get(res['doc_id'], 'Unknown')}]\n{res['text']}")
                 
     assembled_context = "\n\n".join(context_chunks) if context_chunks else "No relevant memories or documents found."
-    return StreamingResponse(stream_ollama(req.prompt, assembled_context, req.model, req.history), media_type="text/event-stream")
+    return StreamingResponse(stream_llama(req.prompt, assembled_context, req.model, req.history), media_type="text/event-stream")
 
 @app.delete("/documents/{doc_id}")
 def delete_document(doc_id: str):

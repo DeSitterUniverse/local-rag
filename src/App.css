@@ -112,3 +112,58 @@ button, input {
 .markdown-body th {
   background-color: var(--panel-bg);
 }
+
+/* Thinking/Reasoning Block */
+.thinking-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background-color: var(--panel-bg);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  letter-spacing: 0.02em;
+}
+.thinking-toggle:hover {
+  background-color: var(--input-bg);
+  color: var(--text-main);
+}
+.thinking-toggle .chevron {
+  display: inline-block;
+  font-size: 0.6rem;
+  transition: transform 0.25s ease;
+}
+.thinking-toggle .chevron.open {
+  transform: rotate(90deg);
+}
+.thinking-content {
+  overflow: hidden;
+  transition: max-height 0.35s ease, opacity 0.3s ease;
+  max-height: 0;
+  opacity: 0;
+}
+.thinking-content.visible {
+  max-height: 2000px;
+  opacity: 1;
+}
+.thinking-content-inner {
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+  background-color: var(--app-bg);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}

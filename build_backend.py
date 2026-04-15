@@ -9,12 +9,22 @@ def build():
     hidden_imports = [
         "lancedb",
         "tantivy",
-        "sentence_transformers", # python module is sentence_transformers
+        "onnxruntime",
+        "transformers",
+        "numpy",
+        "llama_cpp",
         "uvicorn",
         "docx",
         "openpyxl",
         "pypdf"
     ]
+    
+    onnx_cross = os.path.expanduser("~/cephalon-data/models/cross-encoder")
+    onnx_embed = os.path.expanduser("~/cephalon-data/models/embedder")
+    
+    if not os.path.exists(onnx_cross) or not os.path.exists(onnx_embed):
+        print("ERROR: ONNX models not found. Run 'python export_onnx.py' first.")
+        sys.exit(1)
     
     cmd = [
         sys.executable,
@@ -22,7 +32,10 @@ def build():
         "--noconfirm",
         "--onedir",
         "--name", "engine",
+        "--collect-all=llama_cpp",
         "--add-data", "AI_SYSTEM_AWARENESS.md;.",
+        "--add-data", f"{onnx_cross};onnx_models/cross-encoder",
+        "--add-data", f"{onnx_embed};onnx_models/embedder",
         "python/main.py"
     ]
     
