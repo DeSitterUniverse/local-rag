@@ -10,7 +10,7 @@
 Cephalon is constructed using a decoupled, dual-language pipeline designed to maximize both front-end speed and semantic parsing capabilities without compromising local memory.
 
 ### 1. Decoupled Pipeline
-*   **Frontend (Tauri + React):** The user interface is driven by a lightning-fast Rust framework (Tauri) rendering React. This bypasses the heavy RAM bloat of traditional Electron applications.
+*   **Frontend (Tauri + React):** The user interface is driven by a Rust framework (Tauri) rendering React. A lot lower ram usage compared to Electron apps.
 *   **Backend (FastAPI + Python):** Complex document parsing (OCR, proprietary format extraction) and vector embedding mathematics are hosted natively in Python.
 *   **Invisible Bridging:** In production, the backend is bundled via PyInstaller and automatically managed as a hidden Sidecar executable by Tauri OS bindings.
 
@@ -28,7 +28,7 @@ Cephalon is constructed using a decoupled, dual-language pipeline designed to ma
 *   **Cross-Encoder Reranking:** The top 20 hybrid search candidates are reranked through `ms-marco-MiniLM-L-6-v2` running natively on ONNX Runtime. Only the top 3 most semantically relevant chunks are passed to the LLM context window.
 
 ### 5. Thinking/Reasoning UI
-*   Models that emit `<think>` tags (e.g., DeepSeek, QwQ) have their chain-of-thought reasoning automatically hidden behind a collapsible toggle in the chat UI. Users can expand the reasoning on demand without cluttering the visible response.
+*   Models that emit `<think>` tags have their chain-of-thought reasoning automatically hidden behind a collapsible toggle in the chat UI. Users can expand the reasoning on demand without cluttering the visible response.
 
 ---
 
