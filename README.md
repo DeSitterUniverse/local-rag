@@ -1,5 +1,5 @@
 # Cephalon (v1.3.0)
-> **Cephalon** is a fully self-contained, locally-hosted intelligence platform. It merges zero-dependency OS-native windowing via Tauri v2 with the extreme out-of-core scalability of LanceDB. Feed it anything - from dense PDFs to colossal multi-sheet Excel files - and instantly retrieve explicitly cited answers. No cloud. No telemetry. No external services.
+> **Cephalon** is a fully self-contained, locally-hosted intelligence platform. It merges zero-dependency OS-native windowing via Tauri v2 with the extreme out-of-core scalability of LanceDB. Feed it anything - from dense PDFs to colossal multi-sheet Excel files - and instantly retrieve explicitly cited answers.
 
 ![Version 1.3](https://img.shields.io/badge/version-1.3.0-blue) ![License MIT](https://img.shields.io/badge/license-MIT-green)
 
@@ -18,13 +18,13 @@ Cephalon is constructed using a decoupled, dual-language pipeline designed to ma
 *   **LanceDB:** A serverless engine managing all Machine Learning embeddings highly efficiently on-disk, allowing processing of massive datasets without overwhelming local RAM.
 *   **SQLite:** Traditional lightweight relational layer tracking file paths, ingestion state metadata, and deletion synchronization to ensure the UI interface reflects the vector state perfectly.
 
-### 3. Inference Engine (llama-cpp-python)
+### 3. Inference Engine
 *   **Dynamic GGUF Loading:** Cephalon scans `~/cephalon-data/models` for `.gguf` model files and presents them in a frontend dropdown for hot-swapping. Models are loaded into VRAM on-demand with automatic deallocation on switch.
 *   **GPU Acceleration:** Full GPU offloading via `n_gpu_layers=-1` with Vulkan backend support for AMD/NVIDIA hardware.
 *   **No External Daemons:** Unlike previous versions that relied on Ollama, generation now runs directly inside the FastAPI process. No background services needed.
 
 ### 4. Retrieval & Reranking Pipeline
-*   **Embedding:** Text is embedded locally using a pure ONNX Runtime inference session running `BAAI/bge-base-en-v1.5` (768 dimensions). Zero PyTorch dependency.
+*   **Embedding:** Text is embedded locally using a pure ONNX Runtime inference session running `BAAI/bge-base-en-v1.5` (768 dimensions).
 *   **Cross-Encoder Reranking:** The top 20 hybrid search candidates are reranked through `ms-marco-MiniLM-L-6-v2` running natively on ONNX Runtime. Only the top 3 most semantically relevant chunks are passed to the LLM context window.
 
 ### 5. Thinking/Reasoning UI
