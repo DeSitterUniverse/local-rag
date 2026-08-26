@@ -1,6 +1,6 @@
 [package]
 name = "cephalon"
-version = "2.0.0"
+version = "3.0.0"
 edition = "2021"
 description = "Native GPUI desktop client for the Cephalon local RAG workbench"
 authors = ["you"]
