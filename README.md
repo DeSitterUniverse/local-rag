@@ -164,12 +164,9 @@ See [LOCAL_STARTUP_NOTES.md](LOCAL_STARTUP_NOTES.md) for the complete environmen
 
 ## Development and packaging
 
-The desktop shell is a native Rust application built with the pinned GPUI
-Community Edition (GPUI-CE) runtime and its `gpui_elements` input primitives.
-Cephalon's existing Python HTTP/SSE backend remains a separate local service.
-The frontend does not embed retrieval or model logic. See
-[native-frontend.md](docs/native-frontend.md) for the dependency and
-packaging boundary.
+The desktop shell is a native Rust application built with GPUI Community Edition (GPUI-CE). GPUI is a hybrid immediate and retained mode, GPU accelerated, UI framework for Rust. Using the maintained gpui_elements primitives, chat, search, and settings feel fast, responsive, and distinctly native rather than like web interfaces wrapped in a desktop shell. The result is a focused, purpose-built workspace designed for fluid local research, with Rust performance and GPU-powered rendering underneath.
+
+See[native-frontend.md](docs/native-frontend.md) for the dependency and packaging boundary.
 
 | Task                                    | Windows command                                    |
 | --------------------------------------- | -------------------------------------------------- |
@@ -215,4 +212,3 @@ cargo test
 ## License
 
 Cephalon’s source code is available under the [MIT License](LICENSE). Retrieval-model files remain subject to their respective licenses described above.
-
