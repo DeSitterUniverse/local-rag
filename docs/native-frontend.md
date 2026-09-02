@@ -11,7 +11,7 @@ The current GPUI-CE source revision is pinned in `native/Cargo.toml` and the
 workspace `Cargo.lock`:
 
 ```text
-c738623ffbcec2aeddc44a645cc6b74646d5cf97
+6955be8631bada5ecf2df8469f1cef1cc950382b
 ```
 
 `gpui-component` was evaluated separately. Its current upstream manifest still

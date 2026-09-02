@@ -11,9 +11,9 @@ name = "cephalon"
 path = "src/main.rs"
 
 [dependencies]
-gpui = { git = "https://github.com/gpui-ce/gpui-ce", rev = "c738623ffbcec2aeddc44a645cc6b74646d5cf97" }
-gpui_platform = { git = "https://github.com/gpui-ce/gpui-ce", rev = "c738623ffbcec2aeddc44a645cc6b74646d5cf97" }
-gpui_elements = { git = "https://github.com/gpui-ce/gpui-ce", rev = "c738623ffbcec2aeddc44a645cc6b74646d5cf97" }
+gpui = { git = "https://github.com/gpui-ce/gpui-ce", rev = "6955be8631bada5ecf2df8469f1cef1cc950382b", package = "gpui-ce" }
+gpui_platform = { git = "https://github.com/gpui-ce/gpui-ce", rev = "6955be8631bada5ecf2df8469f1cef1cc950382b", package = "gpui_ce_platform" }
+gpui_elements = { git = "https://github.com/gpui-ce/gpui-ce", rev = "6955be8631bada5ecf2df8469f1cef1cc950382b", package = "gpui_ce_elements" }
 image = { version = "0.25.1", default-features = false, features = ["png"] }
 async-channel = "2"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
@@ -26,7 +26,7 @@ pulldown-cmark = { version = "0.13.4", default-features = false }
 libc = "0.2"
 
 [dev-dependencies]
-gpui = { git = "https://github.com/gpui-ce/gpui-ce", rev = "c738623ffbcec2aeddc44a645cc6b74646d5cf97", features = ["test-support"] }
+gpui = { git = "https://github.com/gpui-ce/gpui-ce", rev = "6955be8631bada5ecf2df8469f1cef1cc950382b", package = "gpui-ce", features = ["test-support"] }
 
 [build-dependencies]
 winresource = "0.1.31"
